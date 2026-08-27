@@ -49,8 +49,25 @@ class NormalizeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             source = Path(tmp) / "names.txt"
             source.write_text("Candidate-One.com\ncandidate-two\ncandidate-one\n", encoding="utf-8")
-            names = MODULE.load_names(["Candidate-Two.com", "candidate-three"], str(source))
+            names, invalids = MODULE.load_names(
+                ["Candidate-Two.com", "candidate-three"], str(source)
+            )
         self.assertEqual(names, ["candidate-two", "candidate-three", "candidate-one"])
+        self.assertEqual(invalids, [])
+
+    def test_load_names_records_invalid_labels_without_dropping_valid_ones(self):
+        names, invalids = MODULE.load_names(
+            ["good-name", "bad_name", "also-good", "bad_name", "-bad", "# ignore"],
+            None,
+        )
+        self.assertEqual(names, ["good-name", "also-good"])
+        self.assertEqual([row["name"] for row in invalids], ["bad_name", "-bad"])
+        self.assertTrue(all(row["status"] == "invalid" for row in invalids))
+        self.assertTrue(all(row["http"] is None for row in invalids))
+
+    def test_only_invalid_labels_still_exits(self):
+        with self.assertRaises(SystemExit):
+            MODULE.load_names(["bad_name", "-bad"], None)
 
 
 class CheckTests(unittest.TestCase):
@@ -100,8 +117,20 @@ class PayloadAndCliTests(unittest.TestCase):
         self.assertEqual(payload["no_rdap_record"], 1)
         self.assertEqual(payload["registered"], 1)
         self.assertEqual(payload["unknown"], 1)
+        self.assertEqual(payload["invalid"], 0)
         self.assertEqual([item["domain"] for item in payload["results"]], ["b.com"])
         self.assertIn("checked_at_utc", payload)
+
+    def test_available_only_hides_invalid_but_preserves_count(self):
+        results = [
+            {"status": "invalid", "domain": "bad_name.com"},
+            {"status": "no_rdap_record", "domain": "b.com"},
+            {"status": "registered", "domain": "a.com"},
+        ]
+        payload = MODULE.build_payload(results, available_only=True)
+        self.assertEqual(payload["checked"], 3)
+        self.assertEqual(payload["invalid"], 1)
+        self.assertEqual([item["domain"] for item in payload["results"]], ["b.com"])
 
     @patch.object(MODULE, "check_name")
     def test_json_cli_and_output_file(self, check_name):
@@ -134,6 +163,28 @@ class PayloadAndCliTests(unittest.TestCase):
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
             code = MODULE.main(["maybe"])
         self.assertEqual(code, 2)
+
+    @patch.object(MODULE, "check_name")
+    def test_invalid_label_does_not_abort_or_use_unknown_exit(self, check_name):
+        check_name.side_effect = lambda name, _attempts: {
+            "name": name,
+            "domain": f"{name}.com",
+            "status": "no_rdap_record",
+            "http": 404,
+        }
+        stdout = io.StringIO()
+        with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
+            code = MODULE.main(["--json", "good-name", "bad_name"])
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(code, 0)
+        self.assertEqual(payload["checked"], 2)
+        self.assertEqual(payload["invalid"], 1)
+        self.assertEqual(payload["no_rdap_record"], 1)
+        self.assertEqual(payload["unknown"], 0)
+        self.assertEqual(check_name.call_count, 1)
+        by_name = {row["name"]: row["status"] for row in payload["results"]}
+        self.assertEqual(by_name["good-name"], "no_rdap_record")
+        self.assertEqual(by_name["bad_name"], "invalid")
 
 
 if __name__ == "__main__":

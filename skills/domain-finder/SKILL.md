@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires Python 3.10+ and outbound HTTPS access to rdap.verisign.com.
 metadata:
   author: domain-finder-contributors
-  version: "1.0.0"
+  version: "1.1.0"
 ---
 
 # Domain Finder
@@ -55,7 +55,7 @@ Generate candidates across independent families:
 - pronounceable coined blends;
 - a strong favorite plus an honest modifier such as `get`, `use`, `app`, or `coach`.
 
-Write one candidate per line. Keep generation separate from ranking; do not burn model calls checking names one at a time.
+Write one candidate per line. Aim for 80–150 names. Cap the modifier family at about six; those usually survive and will crowd the 404 list. Keep generation separate from ranking; do not burn model calls checking names one at a time.
 
 **Complete when:** the file contains a deduplicated, varied corpus rather than minor variations of one idea.
 
@@ -79,7 +79,7 @@ python <skill-dir>/scripts/check_com_domains.py \
   candidate-one candidate-two candidate-three
 ```
 
-The script accepts positional names, `--file`, or stdin; normalizes names and URLs; deduplicates them; uses bounded concurrency; retries transient failures; and preserves unresolved checks as `unknown`.
+The script accepts positional names, `--file`, or stdin; normalizes names and URLs; deduplicates them; records invalid labels without aborting the batch; uses bounded concurrency; retries transient failures; and preserves unresolved checks as `unknown`.
 
 Interpret results exactly:
 
@@ -88,6 +88,7 @@ Interpret results exactly:
 | `registered` / HTTP 200 | A current `.com` registry record exists |
 | `no_rdap_record` / HTTP 404 | No current Verisign RDAP record; likely unregistered |
 | `unknown` | Network, rate-limit, service, or unexpected-response failure |
+| `invalid` | Not a legal `.com` label; not queried; never an availability claim |
 
 Never convert `unknown` into a positive availability claim.
 
@@ -95,7 +96,7 @@ Never convert `unknown` into a positive availability claim.
 
 ### 4. Run a second creative pass
 
-Study the strongest 404 survivors, identify which semantic families survived, create a sharper second batch around those families, and run the same script again. First-pass survivors are often technically usable but bland.
+Study the strongest 404 survivors, identify which exact-brand families survived, create a sharper second batch around those families, and run the same script again. First-pass survivors are often technically usable but bland. Do not refill the batch with more `get`, `use`, or `app` variants unless the modifier route is the strategy.
 
 **Complete when:** the best candidates have survived both taste filtering and fresh RDAP screening.
 
@@ -109,7 +110,7 @@ Score finalists on:
 4. distinctiveness without synthetic awkwardness;
 5. visual identity fit;
 6. room to expand;
-7. absence of misleading implications.
+7. absence of misleading implications and famous marks in the same category.
 
 Use the hearing test: can someone hear it once, type the domain, and say it naturally in “I use ___” and “Go to ___.com”?
 

@@ -3,6 +3,8 @@
 
 A 404 means no current registry record. It is a strong screening signal, not a
 registrar purchase guarantee or trademark clearance.
+
+Invalid labels are recorded as `invalid` and do not abort the batch.
 """
 
 from __future__ import annotations
@@ -21,11 +23,11 @@ from pathlib import Path
 ENDPOINT = "https://rdap.verisign.com/com/v1/domain/{domain}"
 LABEL_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
 TRANSIENT_HTTP = {408, 425, 429, 500, 502, 503, 504}
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 
 
-def normalize(value: str) -> str | None:
-    """Normalize a name or URL to one valid .com label."""
+def prepare(value: str) -> str | None:
+    """Strip comments, URLs, and a trailing .com. None means skip."""
     value = value.strip().lower()
     if not value or value.startswith("#"):
         return None
@@ -35,10 +37,28 @@ def normalize(value: str) -> str | None:
         value = value[4:]
     if value.endswith(".com"):
         value = value[:-4]
-    value = value.strip(".")
-    if not LABEL_RE.fullmatch(value):
-        raise ValueError(f"Invalid .com label: {value!r}")
-    return value
+    return value.strip(".")
+
+
+def normalize(value: str) -> str | None:
+    """Normalize a name or URL to one valid .com label."""
+    prepared = prepare(value)
+    if prepared is None:
+        return None
+    if not LABEL_RE.fullmatch(prepared):
+        raise ValueError(f"Invalid .com label: {prepared!r}")
+    return prepared
+
+
+def invalid_result(label: str, error: str) -> dict[str, object]:
+    """Build a result row for a name that cannot be queried."""
+    return {
+        "name": label,
+        "domain": f"{label}.com",
+        "status": "invalid",
+        "http": None,
+        "error": error,
+    }
 
 
 def check_name(name: str, attempts: int = 3) -> dict[str, object]:
@@ -103,8 +123,10 @@ def check_name(name: str, attempts: int = 3) -> dict[str, object]:
     raise AssertionError("retry loop exhausted unexpectedly")
 
 
-def load_names(positional: list[str], file_path: str | None) -> list[str]:
-    """Load, normalize, and deduplicate candidates while preserving order."""
+def load_names(
+    positional: list[str], file_path: str | None
+) -> tuple[list[str], list[dict[str, object]]]:
+    """Load candidates; record invalid labels without aborting the batch."""
     raw = list(positional)
     if file_path:
         raw.extend(Path(file_path).read_text(encoding="utf-8").splitlines())
@@ -112,15 +134,24 @@ def load_names(positional: list[str], file_path: str | None) -> list[str]:
         raw.extend(sys.stdin.read().splitlines())
 
     names: list[str] = []
+    invalids: list[dict[str, object]] = []
     seen: set[str] = set()
+    seen_invalid: set[str] = set()
     for value in raw:
-        name = normalize(value)
+        try:
+            name = normalize(value)
+        except ValueError as error:
+            label = prepare(value) or value.strip().lower()
+            if label not in seen_invalid:
+                seen_invalid.add(label)
+                invalids.append(invalid_result(label, str(error)))
+            continue
         if name and name not in seen:
             seen.add(name)
             names.append(name)
     if not names:
         raise SystemExit("No valid candidates supplied")
-    return names
+    return names, invalids
 
 
 def build_payload(results: list[dict[str, object]], available_only: bool) -> dict[str, object]:
@@ -130,6 +161,7 @@ def build_payload(results: list[dict[str, object]], available_only: bool) -> dic
         "no_rdap_record": sum(r["status"] == "no_rdap_record" for r in results),
         "registered": sum(r["status"] == "registered" for r in results),
         "unknown": sum(r["status"] == "unknown" for r in results),
+        "invalid": sum(r["status"] == "invalid" for r in results),
     }
     shown = (
         [r for r in results if r["status"] == "no_rdap_record"]
@@ -164,7 +196,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
-    names = load_names(args.names, args.file)
+    names, invalids = load_names(args.names, args.file)
     workers = max(1, min(args.workers, 16))
     attempts = max(1, args.attempts)
 
@@ -185,6 +217,7 @@ def main(argv: list[str] | None = None) -> int:
                 }
 
     results = [ordered[name] for name in names]
+    results.extend(invalids)
     payload = build_payload(results, args.available_only)
     encoded = json.dumps(payload, indent=2)
 
@@ -201,7 +234,8 @@ def main(argv: list[str] | None = None) -> int:
             f"checked={payload['checked']} "
             f"no_record={payload['no_rdap_record']} "
             f"registered={payload['registered']} "
-            f"unknown={payload['unknown']}",
+            f"unknown={payload['unknown']} "
+            f"invalid={payload['invalid']}",
             file=sys.stderr,
         )
 

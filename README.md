@@ -8,7 +8,8 @@ The checker classifies each candidate as:
 
 - `registered` — Verisign returned HTTP 200;
 - `no_rdap_record` — Verisign returned HTTP 404;
-- `unknown` — the result was not safe to classify.
+- `unknown` — the result was not safe to classify;
+- `invalid` — the input was not a legal `.com` label and was not queried.
 
 A 404 is a strong registry-screening signal, **not** a purchase guarantee or trademark clearance.
 
@@ -82,7 +83,7 @@ The checker has no third-party Python dependencies.
 --version            print the script version
 ```
 
-The process exits `2` if any result remains `unknown`, making it safe to use in automation without silently treating network failures as availability.
+Invalid labels are recorded in the result set and do not abort the batch. The process exits `2` if any result remains `unknown`, making it safe to use in automation without silently treating network failures as availability. `invalid` does not use that exit code.
 
 ## Requirements
 
