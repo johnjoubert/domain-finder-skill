@@ -1,7 +1,7 @@
 ---
 name: domain-finder
 description: Use when generating product or company names that require an exact .com domain. Generate candidates, screen them in bulk with the included Verisign RDAP script, recheck finalists, and report registry evidence without overstating availability or trademark safety.
-license: MIT. See LICENSE
+license: Apache-2.0. See LICENSE
 compatibility: Requires Python 3.10+ and outbound HTTPS access to rdap.verisign.com.
 metadata:
   author: domain-finder-contributors
@@ -158,7 +158,7 @@ Report batch counts and unknowns. Attach the JSON output when the full evidence 
 - [Verisign RDAP checker](scripts/check_com_domains.py) — dependency-free bulk `.com` screening.
 - [Verisign RDAP evidence guide](references/verisign-rdap-domain-screening.md) — endpoint semantics and final confirmation.
 - [Candidate generation and ranking guide](references/candidate-generation-and-ranking.md) — naming families and taste filters.
-- [License](LICENSE) — MIT. Complete terms for this skill directory.
+- [License](LICENSE) — Apache-2.0. Complete terms for this skill directory.
 
 Some skill clients copy only support files explicitly linked from `SKILL.md`; keep these links intact.
 

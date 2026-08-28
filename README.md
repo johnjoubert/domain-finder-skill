@@ -99,4 +99,4 @@ python -m unittest discover -s tests -v
 
 ## License
 
-MIT
+Apache-2.0. See [LICENSE](LICENSE). The portable skill directory includes the same terms in `skills/domain-finder/LICENSE`.
