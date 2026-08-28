@@ -32,6 +32,7 @@ The exact installation command and destination vary by agent. The portable contr
 ```text
 domain-finder/
 ├── SKILL.md
+├── LICENSE
 ├── references/
 │   ├── candidate-generation-and-ranking.md
 │   └── verisign-rdap-domain-screening.md
